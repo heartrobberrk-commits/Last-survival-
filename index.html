@@ -1,6 +1,4 @@
-
-
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -20,8 +18,8 @@ button{border:0;border-radius:12px;padding:13px 20px;background:#fff;color:#111;
 #controls{position:fixed;left:18px;bottom:18px;right:18px;display:flex;justify-content:space-between;pointer-events:none}
 #stick,#fire{pointer-events:auto;width:125px;height:125px;border-radius:50%;border:1px solid #fff3;background:#ffffff14;position:relative}
 #knob{position:absolute;width:54px;height:54px;border-radius:50%;background:#ffffff55;left:35px;top:35px}
-#fire{width:92px;height:92px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;user-select:none}
-.hint{font-size:12px;color:#98a2b0}
+#fire{width:92px;height:92px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;user-select:none;background:rgba(255,0,0,0.2);border:2px solid rgba(255,255,255,0.4)}
+#fire:active{background:rgba(255,0,0,0.5)}
 @media(min-width:800px){#controls{display:none}}
 </style>
 </head>
@@ -34,7 +32,7 @@ button{border:0;border-radius:12px;padding:13px 20px;background:#fff;color:#111;
 </div>
 <div id="start"><div class="panel">
 <h1>LAST SURVIVOR</h1>
-<p>Survive the enemy waves. Move with <b>WASD</b> or Joystick and hold <b>FIRE</b> to shoot!</p>
+<p>Joystick se move karo aur FIRE button dabakar goliyan chalao!</p>
 <button id="startBtn">START GAME</button>
 </div></div>
 <div id="gameover" style="display:none"><div class="panel">
@@ -63,7 +61,8 @@ c.addEventListener('pointerdown',e=>{if(e.button===0)mouse.down=true});
 addEventListener('pointerup',e=>{if(e.button===0)mouse.down=false});
 
 let running=false,player,enemies=[],bullets=[],particles=[],score=0,wave=1,spawnLeft=0,spawnTimer=0,last=0,fireCD=0;
-const joy={x:0,y:0,active:false,id:null},fire={down:false};
+const joy={x:0,y:0,active:false,id:null};
+let isFiring=false;
 
 function reset(){
  player={x:W/2,y:H/2,r:16,hp:100,speed:200,angle:0,ammo:30,reload:0};
@@ -86,7 +85,7 @@ function spawn(){
 
 function shoot(tx,ty){
  if(player.reload>0) return;
- if(player.ammo<=0){player.reload=1;return;}
+ if(player.ammo<=0){player.reload=1.2;return;}
  const dx=tx-player.x,dy=ty-player.y,len=Math.hypot(dx,dy)||1;
  bullets.push({x:player.x+dx/len*18,y:player.y+dy/len*18,vx:dx/len*600,vy:dy/len*600,r:4,life:1});
  player.ammo--;fireCD=.12;
@@ -114,14 +113,14 @@ function update(dt){
 
  const target=nearest();
  if(target){player.angle=Math.atan2(target.y-player.y,target.x-player.x)}
- else if(mouse.down){player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x)}
 
  if(player.reload>0){player.reload-=dt;if(player.reload<=0){player.ammo=30;player.reload=0;}}
  fireCD-=dt;
 
- if((mouse.down||fire.down||keys[' '])&&fireCD<=0) {
+ // Bullet Shooting Fix
+ if((mouse.down || isFiring || keys[' ']) && fireCD<=0) {
    if(target) shoot(target.x,target.y);
-   else shoot(mouse.x,mouse.y);
+   else shoot(player.x+Math.cos(player.angle)*100, player.y+Math.sin(player.angle)*100);
  }
 
  spawnTimer-=dt;
@@ -176,19 +175,31 @@ function draw(){
 
 function loop(t){if(!running)return;const dt=Math.min(.033,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(loop)}
 
+// JOYSTICK CONTROLS
 const stick=document.getElementById('stick'),knob=document.getElementById('knob');
-stick.addEventListener('pointerdown',e=>{joy.active=true;joy.id=e.pointerId;stick.setPointerCapture(e.pointerId);moveJoy(e)});
-stick.addEventListener('pointermove',e=>{if(joy.active&&e.pointerId===joy.id)moveJoy(e)});
-stick.addEventListener('pointerup',endJoy);stick.addEventListener('pointercancel',endJoy);
+stick.addEventListener('touchstart',e=>{joy.active=true;moveJoy(e.touches[0]);},{passive:false});
+stick.addEventListener('touchmove',e=>{if(joy.active)moveJoy(e.touches[0]);},{passive:false});
+stick.addEventListener('touchend',endJoy);
+stick.addEventListener('touchcancel',endJoy);
 
-function moveJoy(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy,m=48,l=Math.hypot(dx,dy)||1;if(l>m){dx=dx/l*m;dy=dy/l*m}joy.x=dx/m;joy.y=dy/m;knob.style.transform=`translate(${dx}px,${dy}px)`}
+function moveJoy(t){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=t.clientX-cx,dy=t.clientY-cy,m=48,l=Math.hypot(dx,dy)||1;if(l>m){dx=dx/l*m;dy=dy/l*m}joy.x=dx/m;joy.y=dy/m;knob.style.transform=`translate(${dx}px,${dy}px)`}
 function endJoy(){joy.active=false;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)'}
 
+// PERFECT FIRE BUTTON CONTROLS (TOUCH + POINTER)
 const fireBtn=document.getElementById('fire');
-fireBtn.addEventListener('pointerdown',e=>{fire.down=true;e.preventDefault();});
-fireBtn.addEventListener('pointerup',e=>{fire.down=false;e.preventDefault();});
-fireBtn.addEventListener('pointercancel',e=>{fire.down=false;e.preventDefault();});
+
+fireBtn.addEventListener('touchstart',e=>{e.preventDefault();isFiring=true;},{passive:false});
+fireBtn.addEventListener('touchend',e=>{e.preventDefault();isFiring=false;},{passive:false});
+fireBtn.addEventListener('touchcancel',e=>{e.preventDefault();isFiring=false;},{passive:false});
+
+fireBtn.addEventListener('mousedown',()=>isFiring=true);
+fireBtn.addEventListener('mouseup',()=>isFiring=false);
+fireBtn.addEventListener('mouseleave',()=>isFiring=false);
 })();
 </script>
 </body>
 </html>
+
+
+
+ 
