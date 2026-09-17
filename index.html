@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -18,7 +18,7 @@ button{border:0;border-radius:12px;padding:13px 20px;background:#fff;color:#111;
 #controls{position:fixed;left:18px;bottom:18px;right:18px;display:flex;justify-content:space-between;pointer-events:none}
 #stick,#fire{pointer-events:auto;width:125px;height:125px;border-radius:50%;border:1px solid #fff3;background:#ffffff14;position:relative}
 #knob{position:absolute;width:54px;height:54px;border-radius:50%;background:#ffffff55;left:35px;top:35px}
-#fire{width:92px;height:92px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800}
+#fire{width:92px;height:92px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;user-select:none}
 .hint{font-size:12px;color:#98a2b0}
 @media(min-width:800px){#controls{display:none}}
 </style>
@@ -32,7 +32,7 @@ button{border:0;border-radius:12px;padding:13px 20px;background:#fff;color:#111;
 </div>
 <div id="start"><div class="panel">
 <h1>LAST SURVIVOR</h1>
-<p>WASD / Arrow Keys se move karein. Player automatically paas wale enemy ko target karega aur auto-shoot karega!</p>
+<p>WASD / Arrow Keys / Joystick se move karein. Mouse click ya FIRE button daba kar rakhein shoot karne ke liye. Khaali hone par R dabayein ya wait karein reload ke liye.</p>
 <button id="startBtn">START GAME</button>
 </div></div>
 <div id="gameover" style="display:none"><div class="panel">
@@ -53,13 +53,23 @@ let W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,2);
 function resize(){W=innerWidth;H=innerHeight;c.width=W*dpr;c.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)} 
 addEventListener('resize',resize);resize();
 
-const keys={};
+const keys={},mouse={x:W/2,y:H/2,down:false};
 
-addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===" ")e.preventDefault()});
+addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(e.key===" ") e.preventDefault();
+  if(e.key.toLowerCase()==='r' && player && player.ammo < 30 && player.reload <= 0){
+    player.reload = 1.5; // Manual Reload with 'R'
+  }
+});
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 
+c.addEventListener('pointermove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+c.addEventListener('pointerdown',e=>{if(e.button===0)mouse.down=true});
+addEventListener('pointerup',e=>{if(e.button===0)mouse.down=false});
+
 let running=false,player,enemies=[],bullets=[],particles=[],score=0,wave=1,spawnLeft=0,spawnTimer=0,last=performance.now(),fireCD=0;
-const joy={x:0,y:0,active:false,id:null};
+const joy={x:0,y:0,active:false,id:null},fire={down:false};
 
 function reset(){
  player={x:W/2,y:H/2,r:16,hp:100,speed:220,angle:0,ammo:30,reload:0};
@@ -81,7 +91,6 @@ function spawn(){
  enemies.push({x,y,r:15+Math.min(wave,8),hp,max:hp,speed:42+wave*3});
 }
 
-// Subse paas wale Dushman (Enemy) ko dhundhna
 function getNearestEnemy(){
  let best=null, bd=Infinity;
  for(const e of enemies){
@@ -91,19 +100,23 @@ function getNearestEnemy(){
  return best;
 }
 
-// Enemy ki taraf Shooot karne ka logic
-function shootAt(target){
- if(player.ammo<=0){player.reload=1;return}
- const dx=target.x-player.x, dy=target.y-player.y, len=Math.hypot(dx,dy)||1;
+function shootAt(targetX, targetY){
+ if(player.reload > 0) return;
+ if(player.ammo <= 0){
+   player.reload = 1.5; // Auto reload when empty
+   return;
+ }
+ const dx=targetX-player.x, dy=targetY-player.y, len=Math.hypot(dx,dy)||1;
  bullets.push({
    x: player.x + (dx/len)*18, 
    y: player.y + (dy/len)*18, 
-   vx: (dx/len)*600, 
-   vy: (dy/len)*600, 
+   vx: (dx/len)*650, 
+   vy: (dy/len)*650, 
    r: 4, 
    life: 1.2
  });
- player.ammo--; fireCD=.15;
+ player.ammo--; 
+ fireCD = 0.15; // Controlled fire rate
 }
 
 function burst(x,y,n=7){
@@ -111,7 +124,7 @@ function burst(x,y,n=7){
 }
 
 function update(dt){
- // 1. MOVEMENT LOGIC (WASD / Keyboard / Joystick)
+ // Fix 1: Smooth Subject Movement
  let mx=0, my=0;
  if(keys['w']||keys['arrowup']) my -= 1;
  if(keys['s']||keys['arrowdown']) my += 1;
@@ -122,35 +135,42 @@ function update(dt){
 
  const len = Math.hypot(mx, my);
  if(len > 0){
-   // Player move hoga speed ke hisab se
    player.x = Math.max(18, Math.min(W-18, player.x + (mx/len)*player.speed*dt));
    player.y = Math.max(18, Math.min(H-18, player.y + (my/len)*player.speed*dt));
  }
 
- // 2. ENEMY AUTO-AIM & AUTO-SHOOT LOGIC
+ // Target Selection
  const target = getNearestEnemy();
  if(target){
-   // Gun aur face dushman ki taraf ghoom jayenge
    player.angle = Math.atan2(target.y - player.y, target.x - player.x);
-   
-   // Dushman dekhte hi apne aap firing start ho jayegi
-   if(fireCD <= 0){
-     shootAt(target);
+ }
+
+ // Fix 2: Reload timer fix
+ if(player.reload > 0){
+   player.reload -= dt;
+   if(player.reload <= 0){
+     player.reload = 0;
+     player.ammo = 30; // Ammo reset successfully
    }
  }
 
- if(player.reload>0){
-   player.reload-=dt;
-   if(player.reload<=0) player.ammo=30;
- }
  fireCD -= dt;
 
- // Spawning Logic
+ // Fix 3: Controlled Shooting (Press / Hold trigger required)
+ const wantsToShoot = mouse.down || fire.down || keys[' '];
+ if(wantsToShoot && fireCD <= 0 && player.reload <= 0){
+   if(target){
+     shootAt(target.x, target.y);
+   } else {
+     shootAt(player.x + Math.cos(player.angle)*100, player.y + Math.sin(player.angle)*100);
+   }
+ }
+
+ // Wave & Enemies Update
  spawnTimer-=dt;
  if(spawnLeft>0&&spawnTimer<=0){spawn();spawnLeft--;spawnTimer=Math.max(.22,.75-wave*.025)}
  if(spawnLeft===0&&enemies.length===0){wave++;waveEl.textContent=wave;spawnLeft=7+wave*3}
 
- // Bullets vs Enemies Collisions
  for(let i=bullets.length-1;i>=0;i--){
    const b=bullets[i];b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
    let hit=false;
@@ -171,7 +191,6 @@ function update(dt){
    if(hit||b.life<=0||b.x<-20||b.x>W+20||b.y<-20||b.y>H+20) bullets.splice(i,1);
  }
 
- // Enemies moving towards Player
  for(const e of enemies){
    const dx=player.x-e.x, dy=player.y-e.y, d=Math.hypot(dx,dy)||1;
    e.x += (dx/d)*e.speed*dt;
@@ -193,7 +212,7 @@ function update(dt){
  
  hpEl.textContent=Math.max(0,Math.ceil(player.hp));
  healthEl.style.width=Math.max(0,player.hp)+'%';
- ammoEl.textContent=player.reload>0?'RELOADING':player.ammo;
+ ammoEl.textContent = player.reload > 0 ? `RELOADING (${Math.ceil(player.reload)}s)` : player.ammo;
  scoreEl.textContent=score;
 }
 
@@ -230,6 +249,7 @@ function loop(t){
  requestAnimationFrame(loop);
 }
 
+// Touch controls handling
 const stick=document.getElementById('stick'),knob=document.getElementById('knob');
 stick.addEventListener('pointerdown',e=>{joy.active=true;joy.id=e.pointerId;stick.setPointerCapture(e.pointerId);moveJoy(e)});
 stick.addEventListener('pointermove',e=>{if(joy.active&&e.pointerId===joy.id)moveJoy(e)});
@@ -237,6 +257,11 @@ stick.addEventListener('pointerup',endJoy);stick.addEventListener('pointercancel
 
 function moveJoy(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy,m=48,l=Math.hypot(dx,dy)||1;if(l>m){dx=dx/l*m;dy=dy/l*m}joy.x=dx/m;joy.y=dy/m;knob.style.transform=`translate(${dx}px,${dy}px)`}
 function endJoy(){joy.active=false;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)'}
+
+const fireBtn=document.getElementById('fire');
+fireBtn.addEventListener('pointerdown',e=>{fire.down=true;fireBtn.setPointerCapture(e.pointerId)});
+fireBtn.addEventListener('pointerup',()=>fire.down=false);
+fireBtn.addEventListener('pointercancel',()=>fire.down=false);
 })();
 </script>
 </body>
