@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7,20 +7,21 @@
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b10;color:#fff;font-family:Arial,sans-serif;touch-action:none}
 canvas{display:block;width:100%;height:100%;background:#10151b}
-#hud{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;justify-content:space-between;pointer-events:none;font-weight:700;text-shadow:0 2px 3px #000}
+#hud{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;justify-content:space-between;pointer-events:none;font-weight:700;text-shadow:0 2px 3px #000;z-index:10}
 .box{background:#0009;border:1px solid #ffffff2b;border-radius:10px;padding:8px 11px;font-size:14px}
 #healthOuter{width:130px;height:12px;border-radius:7px;background:#333;overflow:hidden;margin-top:4px}
 #health{height:100%;width:100%;background:#55d66b}
-#start,#gameover{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000b;text-align:center;padding:24px}
+#start,#gameover{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000b;text-align:center;padding:24px;z-index:20}
 .panel{max-width:440px;background:#121923;border:1px solid #ffffff22;border-radius:18px;padding:28px;box-shadow:0 15px 50px #000}
 h1{margin:0 0 8px;font-size:38px}p{color:#c7ced8;line-height:1.5}
 button{border:0;border-radius:12px;padding:13px 20px;background:#fff;color:#111;font-size:17px;font-weight:800;cursor:pointer}
-#controls{position:fixed;left:18px;bottom:18px;right:18px;display:flex;justify-content:space-between;pointer-events:none}
-#stick,#fire{pointer-events:auto;width:125px;height:125px;border-radius:50%;border:1px solid #fff3;background:#ffffff14;position:relative}
-#knob{position:absolute;width:54px;height:54px;border-radius:50%;background:#ffffff55;left:35px;top:35px}
-#fire{width:92px;height:92px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;user-select:none;background:rgba(255,0,0,0.2);border:2px solid rgba(255,255,255,0.4)}
-#fire:active{background:rgba(255,0,0,0.5)}
-@media(min-width:800px){#controls{display:none}}
+
+/* CONTROLS FIX: Hamesha Visible and Toucheable */
+#controls{position:fixed;left:18px;bottom:18px;right:18px;display:flex;justify-content:space-between;pointer-events:none;z-index:9999}
+#stick,#fire{pointer-events:auto;width:110px;height:110px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.15);position:relative;touch-action:none}
+#knob{position:absolute;width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.6);left:31px;top:31px;pointer-events:none}
+#fire{width:95px;height:95px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;user-select:none;background:rgba(255,0,0,0.3);border:2px solid rgba(255,255,255,0.5)}
+#fire:active{background:rgba(255,0,0,0.6)}
 </style>
 </head>
 <body>
@@ -61,7 +62,7 @@ c.addEventListener('pointerdown',e=>{if(e.button===0)mouse.down=true});
 addEventListener('pointerup',e=>{if(e.button===0)mouse.down=false});
 
 let running=false,player,enemies=[],bullets=[],particles=[],score=0,wave=1,spawnLeft=0,spawnTimer=0,last=0,fireCD=0;
-const joy={x:0,y:0,active:false,id:null};
+const joy={x:0,y:0,active:false};
 let isFiring=false;
 
 function reset(){
@@ -117,7 +118,6 @@ function update(dt){
  if(player.reload>0){player.reload-=dt;if(player.reload<=0){player.ammo=30;player.reload=0;}}
  fireCD-=dt;
 
- // Bullet Shooting Fix
  if((mouse.down || isFiring || keys[' ']) && fireCD<=0) {
    if(target) shoot(target.x,target.y);
    else shoot(player.x+Math.cos(player.angle)*100, player.y+Math.sin(player.angle)*100);
@@ -177,29 +177,30 @@ function loop(t){if(!running)return;const dt=Math.min(.033,(t-last)/1000||0);las
 
 // JOYSTICK CONTROLS
 const stick=document.getElementById('stick'),knob=document.getElementById('knob');
-stick.addEventListener('touchstart',e=>{joy.active=true;moveJoy(e.touches[0]);},{passive:false});
-stick.addEventListener('touchmove',e=>{if(joy.active)moveJoy(e.touches[0]);},{passive:false});
-stick.addEventListener('touchend',endJoy);
-stick.addEventListener('touchcancel',endJoy);
+stick.addEventListener('touchstart',e=>{joy.active=true;e.preventDefault();moveJoy(e.touches[0]);},{passive:false});
+stick.addEventListener('touchmove',e=>{if(joy.active){e.preventDefault();moveJoy(e.touches[0]);}},{passive:false});
+stick.addEventListener('touchend',e=>{e.preventDefault();endJoy();},{passive:false});
+stick.addEventListener('touchcancel',e=>{e.preventDefault();endJoy();},{passive:false});
 
-function moveJoy(t){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=t.clientX-cx,dy=t.clientY-cy,m=48,l=Math.hypot(dx,dy)||1;if(l>m){dx=dx/l*m;dy=dy/l*m}joy.x=dx/m;joy.y=dy/m;knob.style.transform=`translate(${dx}px,${dy}px)`}
-function endJoy(){joy.active=false;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)'}
+function moveJoy(t){
+ const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+ let dx=t.clientX-cx,dy=t.clientY-cy,m=40,l=Math.hypot(dx,dy)||1;
+ if(l>m){dx=dx/l*m;dy=dy/l*m}
+ joy.x=dx/m;joy.y=dy/m;
+ knob.style.transform=`translate(${dx}px,${dy}px)`;
+}
+function endJoy(){joy.active=false;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)';}
 
-// PERFECT FIRE BUTTON CONTROLS (TOUCH + POINTER)
+// FIRE BUTTON CONTROLS
 const fireBtn=document.getElementById('fire');
-
 fireBtn.addEventListener('touchstart',e=>{e.preventDefault();isFiring=true;},{passive:false});
 fireBtn.addEventListener('touchend',e=>{e.preventDefault();isFiring=false;},{passive:false});
 fireBtn.addEventListener('touchcancel',e=>{e.preventDefault();isFiring=false;},{passive:false});
 
-fireBtn.addEventListener('mousedown',()=>isFiring=true);
-fireBtn.addEventListener('mouseup',()=>isFiring=false);
+fireBtn.addEventListener('mousedown',e=>{e.preventDefault();isFiring=true;});
+fireBtn.addEventListener('mouseup',e=>{e.preventDefault();isFiring=false;});
 fireBtn.addEventListener('mouseleave',()=>isFiring=false);
 })();
 </script>
 </body>
 </html>
-
-
-
- 
